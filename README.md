@@ -45,6 +45,21 @@ pip install -e .
 pip install "git+https://github.com/your-org/deepmig.git"
 ```
 
+### Windows Users
+
+The `deepagents-cli` package from PyPI has a compatibility issue on Windows. After installing, apply this fix:
+
+```powershell
+# Download the patched file from the deepagents repo
+curl -o .venv/Lib/site-packages/deepagents_cli/execution.py https://raw.githubusercontent.com/anthropics/deepagents/main/libs/deepagents-cli/deepagents_cli/execution.py
+```
+
+Or if you have the deepagents repo locally:
+
+```powershell
+cp path/to/deepagents/libs/deepagents-cli/deepagents_cli/execution.py .venv/Lib/site-packages/deepagents_cli/
+```
+
 ## Configuration
 
 1. Copy the example environment file:
