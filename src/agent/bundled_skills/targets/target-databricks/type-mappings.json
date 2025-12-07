@@ -1,0 +1,157 @@
+{
+  "sql_server": {
+    "description": "SQL Server to Databricks (Spark SQL) type mappings",
+    "mappings": {
+      "bigint": "BIGINT",
+      "int": "INT",
+      "smallint": "SMALLINT",
+      "tinyint": "TINYINT",
+      "bit": "BOOLEAN",
+      "decimal": "DECIMAL({precision},{scale})",
+      "numeric": "DECIMAL({precision},{scale})",
+      "money": "DECIMAL(19,4)",
+      "smallmoney": "DECIMAL(10,4)",
+      "float": "DOUBLE",
+      "real": "FLOAT",
+      "date": "DATE",
+      "datetime": "TIMESTAMP",
+      "datetime2": "TIMESTAMP",
+      "smalldatetime": "TIMESTAMP",
+      "time": "STRING",
+      "datetimeoffset": "STRING",
+      "char": "STRING",
+      "varchar": "STRING",
+      "text": "STRING",
+      "nchar": "STRING",
+      "nvarchar": "STRING",
+      "ntext": "STRING",
+      "binary": "BINARY",
+      "varbinary": "BINARY",
+      "image": "BINARY",
+      "uniqueidentifier": "STRING",
+      "xml": "STRING",
+      "sql_variant": "STRING"
+    },
+    "notes": {
+      "money": "Use DECIMAL(19,4) to preserve precision",
+      "datetime": "TIMESTAMP handles most datetime scenarios",
+      "time": "Stored as STRING, convert with to_timestamp if needed",
+      "uniqueidentifier": "Stored as STRING (UUID format)"
+    }
+  },
+  "oracle": {
+    "description": "Oracle to Databricks (Spark SQL) type mappings",
+    "mappings": {
+      "number": "DECIMAL({precision},{scale})",
+      "number_no_scale": "BIGINT",
+      "float": "DOUBLE",
+      "binary_float": "FLOAT",
+      "binary_double": "DOUBLE",
+      "date": "TIMESTAMP",
+      "timestamp": "TIMESTAMP",
+      "timestamp with time zone": "TIMESTAMP",
+      "timestamp with local time zone": "TIMESTAMP",
+      "interval year to month": "STRING",
+      "interval day to second": "STRING",
+      "char": "STRING",
+      "varchar2": "STRING",
+      "nchar": "STRING",
+      "nvarchar2": "STRING",
+      "clob": "STRING",
+      "nclob": "STRING",
+      "blob": "BINARY",
+      "raw": "BINARY",
+      "long raw": "BINARY",
+      "rowid": "STRING",
+      "urowid": "STRING"
+    },
+    "notes": {
+      "number": "Without precision, defaults to DECIMAL(38,10)",
+      "date": "Oracle DATE includes time component, use TIMESTAMP"
+    }
+  },
+  "postgresql": {
+    "description": "PostgreSQL to Databricks (Spark SQL) type mappings",
+    "mappings": {
+      "bigint": "BIGINT",
+      "integer": "INT",
+      "smallint": "SMALLINT",
+      "boolean": "BOOLEAN",
+      "decimal": "DECIMAL({precision},{scale})",
+      "numeric": "DECIMAL({precision},{scale})",
+      "real": "FLOAT",
+      "double precision": "DOUBLE",
+      "serial": "INT",
+      "bigserial": "BIGINT",
+      "money": "DECIMAL(19,4)",
+      "date": "DATE",
+      "timestamp": "TIMESTAMP",
+      "timestamp with time zone": "TIMESTAMP",
+      "time": "STRING",
+      "time with time zone": "STRING",
+      "interval": "STRING",
+      "character": "STRING",
+      "character varying": "STRING",
+      "varchar": "STRING",
+      "text": "STRING",
+      "bytea": "BINARY",
+      "uuid": "STRING",
+      "json": "STRING",
+      "jsonb": "STRING",
+      "xml": "STRING",
+      "array": "ARRAY<{element_type}>"
+    }
+  },
+  "mysql": {
+    "description": "MySQL to Databricks (Spark SQL) type mappings",
+    "mappings": {
+      "bigint": "BIGINT",
+      "int": "INT",
+      "mediumint": "INT",
+      "smallint": "SMALLINT",
+      "tinyint": "TINYINT",
+      "tinyint_1": "BOOLEAN",
+      "decimal": "DECIMAL({precision},{scale})",
+      "float": "FLOAT",
+      "double": "DOUBLE",
+      "date": "DATE",
+      "datetime": "TIMESTAMP",
+      "timestamp": "TIMESTAMP",
+      "time": "STRING",
+      "year": "INT",
+      "char": "STRING",
+      "varchar": "STRING",
+      "tinytext": "STRING",
+      "text": "STRING",
+      "mediumtext": "STRING",
+      "longtext": "STRING",
+      "binary": "BINARY",
+      "varbinary": "BINARY",
+      "tinyblob": "BINARY",
+      "blob": "BINARY",
+      "mediumblob": "BINARY",
+      "longblob": "BINARY",
+      "enum": "STRING",
+      "set": "STRING",
+      "json": "STRING"
+    },
+    "notes": {
+      "tinyint_1": "TINYINT(1) is typically used as BOOLEAN"
+    }
+  },
+  "sas": {
+    "description": "SAS to Databricks (Spark SQL) type mappings",
+    "mappings": {
+      "numeric": "DOUBLE",
+      "character": "STRING",
+      "date": "DATE",
+      "datetime": "TIMESTAMP",
+      "time": "STRING"
+    },
+    "notes": {
+      "numeric": "SAS stores all numbers as 8-byte floating point",
+      "date": "SAS dates are days since 1960-01-01",
+      "datetime": "SAS datetimes are seconds since 1960-01-01"
+    }
+  }
+}

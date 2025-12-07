@@ -1,0 +1,309 @@
+"""Skill loader for parsing and loading agent skills from SKILL.md files.
+
+This module implements Anthropic's agent skills pattern with YAML frontmatter parsing.
+Each skill is a directory containing a SKILL.md file with:
+- YAML frontmatter (name, description required)
+- Markdown instructions for the agent
+- Optional supporting files (scripts, configs, etc.)
+
+Example SKILL.md structure:
+```markdown
+---
+name: web-research
+description: Structured approach to conducting thorough web research
+---
+
+# Web Research Skill
+
+## When to Use
+- User asks you to research a topic
+...
+```
+
+Skills are loaded from three sources (in order of precedence, lowest to highest):
+1. Bundled skills: Shipped with the package in `agent/bundled_skills/`
+2. User skills: Per-agent skills in `~/.deepagents/{agent}/skills/`
+3. Project skills: Project-specific skills in `{project}/.deepagents/skills/`
+"""
+
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+from typing import TYPE_CHECKING, TypedDict
+
+if TYPE_CHECKING:
+    pass
+
+# Maximum size for SKILL.md files (10MB)
+MAX_SKILL_FILE_SIZE = 10 * 1024 * 1024
+
+
+class SkillMetadata(TypedDict):
+    """Metadata for a skill."""
+
+    name: str
+    """Name of the skill."""
+
+    description: str
+    """Description of what the skill does."""
+
+    path: str
+    """Path to the SKILL.md file."""
+
+    source: str
+    """Source of the skill ('bundled', 'user', or 'project')."""
+
+
+def get_bundled_skills_dir() -> Path | None:
+    """Get the path to bundled skills shipped with the package.
+
+    Uses importlib.resources for Python 3.9+ to locate the bundled_skills
+    directory within the installed package. Falls back to __file__ based
+    path resolution for development mode.
+
+    Returns:
+        Path to the bundled_skills directory, or None if not found.
+    """
+    # Try importlib.resources first (works for installed packages)
+    if sys.version_info >= (3, 9):
+        try:
+            from importlib.resources import files
+
+            # Look in the agent package for bundled_skills
+            pkg_path = files("agent") / "bundled_skills"
+            # Convert to Path - this works for both installed and editable installs
+            bundled_dir = Path(str(pkg_path))
+            if bundled_dir.exists():
+                return bundled_dir
+        except (ImportError, TypeError, ModuleNotFoundError):
+            pass
+
+    # Fallback: resolve relative to this file (for development)
+    # mig_core/skills/load.py -> agent/bundled_skills
+    this_file = Path(__file__).resolve()
+    # Go up to src/, then into agent/bundled_skills
+    bundled_dir = this_file.parent.parent.parent / "agent" / "bundled_skills"
+    if bundled_dir.exists():
+        return bundled_dir
+
+    return None
+
+
+def _is_safe_path(path: Path, base_dir: Path) -> bool:
+    """Check if a path is safely contained within base_dir.
+
+    This prevents directory traversal attacks via symlinks or path manipulation.
+    The function resolves both paths to their canonical form (following symlinks)
+    and verifies that the target path is within the base directory.
+
+    Args:
+        path: The path to validate
+        base_dir: The base directory that should contain the path
+
+    Returns:
+        True if the path is safely within base_dir, False otherwise
+
+    Example:
+        >>> base = Path("/home/user/.deepagents/skills")
+        >>> safe = Path("/home/user/.deepagents/skills/web-research/SKILL.md")
+        >>> unsafe = Path("/home/user/.deepagents/skills/../../.ssh/id_rsa")
+        >>> _is_safe_path(safe, base)
+        True
+        >>> _is_safe_path(unsafe, base)
+        False
+    """
+    try:
+        # Resolve both paths to their canonical form (follows symlinks)
+        resolved_path = path.resolve()
+        resolved_base = base_dir.resolve()
+
+        # Check if the resolved path is within the base directory
+        # This catches symlinks that point outside the base directory
+        resolved_path.relative_to(resolved_base)
+        return True
+    except ValueError:
+        # Path is not relative to base_dir (outside the directory)
+        return False
+    except (OSError, RuntimeError):
+        # Error resolving paths (e.g., circular symlinks, too many levels)
+        return False
+
+
+def _parse_skill_metadata(skill_md_path: Path, source: str) -> SkillMetadata | None:
+    """Parse YAML frontmatter from a SKILL.md file.
+
+    Args:
+        skill_md_path: Path to the SKILL.md file.
+        source: Source of the skill ('user' or 'project').
+
+    Returns:
+        SkillMetadata with name, description, path, and source, or None if parsing fails.
+    """
+    try:
+        # Security: Check file size to prevent DoS attacks
+        file_size = skill_md_path.stat().st_size
+        if file_size > MAX_SKILL_FILE_SIZE:
+            # Silently skip files that are too large
+            return None
+
+        content = skill_md_path.read_text(encoding="utf-8")
+
+        # Match YAML frontmatter between --- delimiters
+        frontmatter_pattern = r"^---\s*\n(.*?)\n---\s*\n"
+        match = re.match(frontmatter_pattern, content, re.DOTALL)
+
+        if not match:
+            return None
+
+        frontmatter = match.group(1)
+
+        # Parse key-value pairs from YAML (simple parsing, no nested structures)
+        metadata: dict[str, str] = {}
+        for line in frontmatter.split("\n"):
+            # Match "key: value" pattern
+            kv_match = re.match(r"^(\w+):\s*(.+)$", line.strip())
+            if kv_match:
+                key, value = kv_match.groups()
+                metadata[key] = value.strip()
+
+        # Validate required fields
+        if "name" not in metadata or "description" not in metadata:
+            return None
+
+        return SkillMetadata(
+            name=metadata["name"],
+            description=metadata["description"],
+            path=str(skill_md_path),
+            source=source,
+        )
+
+    except (OSError, UnicodeDecodeError):
+        # Silently skip malformed or inaccessible files
+        return None
+
+
+def _list_skills(skills_dir: Path, source: str, recursive: bool = False) -> list[SkillMetadata]:
+    """List all skills from a single skills directory (internal helper).
+
+    Scans the skills directory for subdirectories containing SKILL.md files,
+    parses YAML frontmatter, and returns skill metadata.
+
+    Skills are organized as:
+    skills/
+    ├── skill-name/
+    │   ├── SKILL.md        # Required: instructions with YAML frontmatter
+    │   ├── script.py       # Optional: supporting files
+    │   └── config.json     # Optional: supporting files
+
+    For bundled skills (recursive=True), skills can be nested:
+    bundled_skills/
+    ├── sources/
+    │   ├── source-sqlserver/
+    │   │   └── SKILL.md
+    ├── targets/
+    │   ├── target-databricks/
+    │   │   └── SKILL.md
+
+    Args:
+        skills_dir: Path to the skills directory.
+        source: Source of the skills ('bundled', 'user', or 'project').
+        recursive: If True, search subdirectories for skills (for bundled skills).
+
+    Returns:
+        List of skill metadata dictionaries with name, description, path, and source.
+    """
+    # Check if skills directory exists
+    skills_dir = skills_dir.expanduser()
+    if not skills_dir.exists():
+        return []
+
+    # Resolve base directory to canonical path for security checks
+    try:
+        resolved_base = skills_dir.resolve()
+    except (OSError, RuntimeError):
+        # Can't resolve base directory, fail safe
+        return []
+
+    skills: list[SkillMetadata] = []
+
+    def scan_directory(directory: Path) -> None:
+        """Scan a directory for skills, optionally recursing into subdirectories."""
+        try:
+            for item in directory.iterdir():
+                # Security: Catch symlinks pointing outside the skills directory
+                if not _is_safe_path(item, resolved_base):
+                    continue
+
+                if not item.is_dir():
+                    continue
+
+                # Check if this directory contains a SKILL.md
+                skill_md_path = item / "SKILL.md"
+                if skill_md_path.exists():
+                    # Security: Validate SKILL.md path is safe before reading
+                    if not _is_safe_path(skill_md_path, resolved_base):
+                        continue
+
+                    # Parse metadata
+                    metadata = _parse_skill_metadata(skill_md_path, source=source)
+                    if metadata:
+                        skills.append(metadata)
+                elif recursive:
+                    # Recurse into subdirectory to find nested skills
+                    scan_directory(item)
+        except OSError:
+            # Handle permission errors or other OS issues
+            pass
+
+    scan_directory(skills_dir)
+    return skills
+
+
+def list_skills(
+    *,
+    bundled_skills_dir: Path | None = None,
+    user_skills_dir: Path | None = None,
+    project_skills_dir: Path | None = None,
+) -> list[SkillMetadata]:
+    """List skills from bundled, user, and/or project directories.
+
+    Skills are loaded with the following precedence (highest wins):
+    1. Project skills (override all)
+    2. User skills (override bundled)
+    3. Bundled skills (defaults)
+
+    This allows users to customize or override bundled skills while still
+    providing sensible defaults out of the box.
+
+    Args:
+        bundled_skills_dir: Path to bundled skills shipped with the package.
+        user_skills_dir: Path to the user-level skills directory.
+        project_skills_dir: Path to the project-level skills directory.
+
+    Returns:
+        Merged list of skill metadata from all sources, with project skills
+        taking precedence over user skills, which take precedence over bundled.
+    """
+    all_skills: dict[str, SkillMetadata] = {}
+
+    # Load bundled skills first (lowest precedence, recursive for nested structure)
+    if bundled_skills_dir:
+        bundled_skills = _list_skills(bundled_skills_dir, source="bundled", recursive=True)
+        for skill in bundled_skills:
+            all_skills[skill["name"]] = skill
+
+    # Load user skills second (override bundled)
+    if user_skills_dir:
+        user_skills = _list_skills(user_skills_dir, source="user")
+        for skill in user_skills:
+            all_skills[skill["name"]] = skill
+
+    # Load project skills last (highest precedence)
+    if project_skills_dir:
+        project_skills = _list_skills(project_skills_dir, source="project")
+        for skill in project_skills:
+            all_skills[skill["name"]] = skill
+
+    return list(all_skills.values())
