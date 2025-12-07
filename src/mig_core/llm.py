@@ -169,11 +169,16 @@ def _create_azure_llm(model: str, **kwargs: Any) -> BaseChatModel:
             "Install with: pip install langchain-openai"
         ) from e
 
-    deployment = model or os.getenv("AZURE_OPENAI_DEPLOYMENT")
+    # Accept both AZURE_OPENAI_DEPLOYMENT and AZURE_OPENAI_DEPLOYMENT_NAME
+    deployment = (
+        model
+        or os.getenv("AZURE_OPENAI_DEPLOYMENT")
+        or os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
+    )
     if not deployment:
         raise ValueError(
-            "Azure deployment not configured. Set AZURE_OPENAI_DEPLOYMENT env var "
-            "or specify model in config.yaml"
+            "Azure deployment not configured. Set AZURE_OPENAI_DEPLOYMENT or "
+            "AZURE_OPENAI_DEPLOYMENT_NAME env var, or specify model in config.yaml"
         )
 
     return AzureChatOpenAI(
