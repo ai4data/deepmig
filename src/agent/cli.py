@@ -17,13 +17,14 @@ except ImportError:
     pass  # python-dotenv not installed, rely on system env vars
 
 from deepagents_cli.agent import list_agents, reset_agent
-from deepagents_cli.config import COLORS, SessionState, console, create_model
+from deepagents_cli.config import COLORS, SessionState, console
 from deepagents_cli.main import check_cli_dependencies
 from deepagents_cli.token_utils import calculate_baseline_tokens
 from deepagents_cli.ui import show_help
 
 from agent.agent import create_migration_agent
 from agent.prompts import get_main_prompt
+from mig_core import create_llm, print_provider_info
 from mig_core.skills.commands import execute_skills_command, setup_skills_parser
 from mig_core.session import load_state, get_resume_info, create_initial_state, save_state
 
@@ -75,6 +76,9 @@ def parse_args() -> argparse.Namespace:
 
     # Skills command
     setup_skills_parser(subparsers)
+
+    # Providers command
+    subparsers.add_parser("providers", help="List available LLM providers and current config")
 
     # Default interactive mode
     parser.add_argument(
@@ -208,7 +212,13 @@ async def async_main(assistant_id: str, session_state: SessionState) -> None:
         assistant_id: Agent identifier for memory storage
         session_state: Session state with auto-approve settings
     """
-    model = create_model()
+    try:
+        # Use multi-provider LLM factory (reads from config.yaml or env)
+        model = create_llm()
+    except (ValueError, ImportError) as e:
+        console.print(f"\n[bold red][X] LLM Configuration Error:[/bold red] {e}\n")
+        console.print("[dim]Run 'deepmig providers' to see available providers and configuration.[/dim]")
+        sys.exit(1)
 
     try:
         await run_deepmig_session(model, assistant_id, session_state)
@@ -237,6 +247,8 @@ def main() -> None:
             reset_agent(args.agent, args.source_agent, hard=args.hard)
         elif args.command == "skills":
             execute_skills_command(args)
+        elif args.command == "providers":
+            print_provider_info()
         else:
             # Create session state from args
             session_state = SessionState(auto_approve=args.auto_approve)

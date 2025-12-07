@@ -45,3 +45,9 @@ htmlcov/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# UV lock file (environment-specific)
+uv.lock
+
+# Local config (may contain secrets or personal preferences)
+config.yaml
