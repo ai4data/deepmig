@@ -3,6 +3,7 @@
 This module creates the migration agent with its sub-agents and tools.
 """
 
+import shutil
 from pathlib import Path
 
 from deepagents import create_deep_agent
@@ -20,6 +21,35 @@ from deepagents_cli.config import config
 from agent.prompts import get_main_prompt
 from agent.subagents import code_agent, critique_agent, planning_agent, validator_agent
 from mig_core.skills import SkillsMiddleware, get_bundled_skills_dir
+
+
+def _sync_bundled_skills(bundled_skills_dir: Path, agent_dir: Path) -> Path:
+    """Copy bundled skills to agent's memories for virtual filesystem access.
+
+    Args:
+        bundled_skills_dir: Source path to bundled skills in package.
+        agent_dir: Agent's directory (e.g., ~/.deepagents/migration-planner/).
+
+    Returns:
+        Path to the copied bundled skills in agent_dir.
+    """
+    target_dir = agent_dir / "bundled_skills"
+
+    # Only copy if bundled skills are newer or target doesn't exist
+    if not target_dir.exists():
+        shutil.copytree(bundled_skills_dir, target_dir)
+    else:
+        # Update any changed files
+        for src_file in bundled_skills_dir.rglob("*"):
+            if src_file.is_file():
+                rel_path = src_file.relative_to(bundled_skills_dir)
+                dst_file = target_dir / rel_path
+                dst_file.parent.mkdir(parents=True, exist_ok=True)
+                # Only copy if source is newer
+                if not dst_file.exists() or src_file.stat().st_mtime > dst_file.stat().st_mtime:
+                    shutil.copy2(src_file, dst_file)
+
+    return target_dir
 
 
 def _find_project_skills_dir() -> Path | None:
@@ -91,7 +121,14 @@ def create_migration_agent(
     # Skills directories
     skills_dir = agent_dir / "skills"
     project_skills_dir = _find_project_skills_dir()
-    bundled_skills_dir = get_bundled_skills_dir()
+
+    # Copy bundled skills to agent directory for virtual filesystem access
+    # This allows read_file to access them via /memories/bundled_skills/
+    original_bundled_dir = get_bundled_skills_dir()
+    if original_bundled_dir:
+        bundled_skills_dir = _sync_bundled_skills(original_bundled_dir, agent_dir)
+    else:
+        bundled_skills_dir = None
 
     # Middleware: memory management + skills
     # Note: SummarizationMiddleware is already added by create_deep_agent

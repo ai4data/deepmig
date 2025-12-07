@@ -117,7 +117,7 @@ class SkillsMiddleware(AgentMiddleware):
         skills_dir: Path to the user-level skills directory (per-agent).
         assistant_id: The agent identifier for path references in prompts.
         project_skills_dir: Optional path to project-level skills directory.
-        bundled_skills_dir: Optional path to bundled skills shipped with package.
+        bundled_skills_dir: Optional path to bundled skills (in agent_dir for virtual access).
     """
 
     state_schema = SkillsState
@@ -136,7 +136,7 @@ class SkillsMiddleware(AgentMiddleware):
             skills_dir: Path to the user-level skills directory.
             assistant_id: The agent identifier.
             project_skills_dir: Optional path to the project-level skills directory.
-            bundled_skills_dir: Optional path to bundled skills shipped with package.
+            bundled_skills_dir: Optional path to bundled skills (in agent_dir).
         """
         self.skills_dir = Path(skills_dir).expanduser()
         self.assistant_id = assistant_id
@@ -146,9 +146,30 @@ class SkillsMiddleware(AgentMiddleware):
         self.bundled_skills_dir = (
             Path(bundled_skills_dir) if bundled_skills_dir else None
         )
+        # Store agent_dir for path conversion (parent of skills_dir)
+        self.agent_dir = self.skills_dir.parent
         # Store display paths for prompts
         self.user_skills_display = f"~/.deepagents/{assistant_id}/skills"
         self.system_prompt_template = SKILLS_SYSTEM_PROMPT
+
+    def _to_virtual_path(self, absolute_path: str) -> str:
+        """Convert absolute filesystem path to virtual /memories/ path.
+
+        Args:
+            absolute_path: Absolute path like C:\\Users\\...\\agent_dir\\bundled_skills\\...
+
+        Returns:
+            Virtual path like /memories/bundled_skills/...
+        """
+        abs_path = Path(absolute_path)
+        try:
+            # Get path relative to agent_dir
+            rel_path = abs_path.relative_to(self.agent_dir)
+            # Convert to virtual path with forward slashes
+            return "/memories/" + str(rel_path).replace("\\", "/")
+        except ValueError:
+            # Path is not under agent_dir, return as-is
+            return absolute_path
 
     def _format_skills_locations(self) -> str:
         """Format skills locations for display in system prompt."""
@@ -177,23 +198,25 @@ class SkillsMiddleware(AgentMiddleware):
 
         lines = []
 
-        # Show bundled skills
+        # Show bundled skills (use virtual paths)
         if bundled_skills:
             lines.append("**Bundled Skills** (shipped with DeepMig):")
             for skill in bundled_skills:
+                virtual_path = self._to_virtual_path(skill['path'])
                 lines.append(f"- **{skill['name']}**: {skill['description']}")
-                lines.append(f"  -> Read `{skill['path']}` for full instructions")
+                lines.append(f"  -> Read `{virtual_path}` for full instructions")
             lines.append("")
 
-        # Show user skills
+        # Show user skills (use virtual paths)
         if user_skills:
             lines.append("**User Skills:**")
             for skill in user_skills:
+                virtual_path = self._to_virtual_path(skill['path'])
                 lines.append(f"- **{skill['name']}**: {skill['description']}")
-                lines.append(f"  -> Read `{skill['path']}` for full instructions")
+                lines.append(f"  -> Read `{virtual_path}` for full instructions")
             lines.append("")
 
-        # Show project skills
+        # Show project skills (keep absolute paths - they're in the project dir)
         if project_skills:
             lines.append("**Project Skills:**")
             for skill in project_skills:
