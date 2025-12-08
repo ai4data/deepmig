@@ -1,0 +1,35 @@
+# DeepMig Prompt Configuration
+# Default values injected into all templates
+
+defaults:
+  # Memory paths
+  memories_path: "/memories"
+  config_path: "/memories/input/config/migration_config.json"
+  metadata_path: "/memories/input/metadata"
+  graph_path: "/memories/input/graph/graph.json"
+  codebase_path: "/memories/input/codebase"
+
+  # Output paths
+  plan_output: "/memories/migration_plan.md"
+  scripts_output: "/memories/scripts"
+  logs_output: "/memories/logs"
+
+  # Workflow settings
+  max_planning_attempts: 2
+  critique_approval_threshold: 8
+  broadcast_join_threshold: 100000
+
+# Agent-specific overrides (if needed)
+agents:
+  planning:
+    # Planning agent specific settings
+    pass
+  critique:
+    # Critique agent specific settings
+    pass
+  code:
+    # Code agent specific settings
+    pass
+  validator:
+    # Validator agent specific settings
+    pass

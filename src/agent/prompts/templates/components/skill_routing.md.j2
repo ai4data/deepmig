@@ -1,0 +1,19 @@
+## Skill Routing Logic
+
+```
+source.type = "sql_server"  → Load skill: source-sqlserver
+source.type = "ssis"        → Load skill: source-ssis
+source.type = "informatica" → Load skill: source-informatica
+source.type = "sas"         → Load skill: source-sas
+
+target.platform = "databricks" → Load skill: target-databricks
+target.platform = "snowflake"  → Load skill: target-snowflake
+target.platform = "fabric"     → Load skill: target-fabric
+```
+{% if skills_list %}
+
+### Available Skills
+{% for skill in skills_list %}
+- **{{ skill.name }}**: {{ skill.description }}
+{% endfor %}
+{% endif %}

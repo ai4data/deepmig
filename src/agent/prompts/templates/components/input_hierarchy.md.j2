@@ -1,0 +1,31 @@
+## Input Context & Access Hierarchy
+
+**I have full read access to `{{ memories_path }}/input/`**. However, I {{ priority_mode | default('prioritize inputs as follows') }}.
+
+### Input Directory Structure
+
+```
+{{ memories_path }}/input/
+├── config/                    # Configuration (credentials, source/target specs)
+│   └── migration_config.json
+├── metadata/                  # Database schemas, table definitions
+│   ├── source_schema.json
+│   └── target_schema.json
+├── graph/                     # Rich graph representation of legacy codebase
+│   └── graph.json
+└── codebase/                  # Raw legacy source files (FALLBACK ONLY)
+    └── ...
+```
+
+### Input Priority Hierarchy (CRITICAL)
+
+When gathering information, agents MUST follow this order:
+
+```
+1. CONFIG      → Source/target platforms, credentials, scope
+2. METADATA    → Schema definitions, table structures
+3. GRAPH       → Codebase dependencies, lineage, transformations
+4. CODEBASE    → Raw source files (ONLY if graph is insufficient)
+```
+
+**Graph-to-Codebase Tracing**: Every node and edge in `graph.json` links to its origin file. If information is missing in the Graph (e.g., a specific SQL macro), trace the link back to the raw source file in `{{ memories_path }}/input/codebase/`.

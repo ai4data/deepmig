@@ -22,6 +22,7 @@ dependencies = [
     "networkx>=3.0",
     "python-dotenv>=1.0.0",
     "pyyaml>=6.0",
+    "jinja2>=3.0",
 ]
 
 [project.optional-dependencies]
@@ -68,4 +69,7 @@ agent = [
     "bundled_skills/**/*.md",
     "bundled_skills/**/*.json",
     "bundled_skills/**/*.py",
+    "prompts/templates/**/*.j2",
+    "prompts/templates/**/*.md.j2",
+    "prompts/config/*.yaml",
 ]

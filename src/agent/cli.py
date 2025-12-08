@@ -26,7 +26,7 @@ from agent.agent import create_migration_agent
 from agent.prompts import get_main_prompt
 from mig_core import create_llm, print_provider_info
 from mig_core.skills.commands import execute_skills_command, setup_skills_parser
-from mig_core.session import load_state, get_resume_info, create_initial_state, save_state
+from mig_core.session import load_state, get_resume_info, create_initial_state, save_state, WorkflowSession
 
 
 # DeepMig ASCII banner - ASCII-only for Windows compatibility
