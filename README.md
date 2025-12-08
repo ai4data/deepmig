@@ -25,7 +25,7 @@ Migrate SSIS, Informatica, and other legacy data pipelines to Databricks, Snowfl
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/deepmig.git
+git clone https://github.com/ai4data/deepmig.git
 cd deepmig
 
 # Create virtual environment and install
@@ -42,21 +42,12 @@ pip install -e .
 ### From GitHub (Single Command)
 
 ```bash
-pip install "git+https://github.com/your-org/deepmig.git"
+pip install "git+https://github.com/ai4data/deepmig.git"
 ```
 
-### Windows Users
+### Platform Support
 
-The `deepagents-cli` package from PyPI has compatibility issues on Windows. After installing, apply this fix by copying all Python files from the deepagents repo:
-
-```powershell
-# If you have the deepagents repo locally:
-cp path/to/deepagents/libs/deepagents-cli/deepagents_cli/*.py .venv/Lib/site-packages/deepagents_cli/
-
-# Or clone and copy:
-git clone https://github.com/anthropics/deepagents.git /tmp/deepagents
-cp /tmp/deepagents/libs/deepagents-cli/deepagents_cli/*.py .venv/Lib/site-packages/deepagents_cli/
-```
+DeepMig works on **Windows**, **Linux**, and **macOS** without additional configuration.
 
 ## Configuration
 

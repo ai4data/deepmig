@@ -10,6 +10,8 @@ from mig_core.llm import (
     print_provider_info,
 )
 
+from mig_core.agent_memory import AgentMemoryMiddleware
+
 from mig_core.session import (
     # New class-based API
     WorkflowSession,
@@ -29,6 +31,8 @@ from mig_core.session import (
 )
 
 __all__ = [
+    # Agent Memory
+    "AgentMemoryMiddleware",
     # LLM
     "LLMProvider",
     "create_llm",

@@ -15,8 +15,9 @@ from langchain.messages import ToolCall
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.runtime import Runtime
 
-from deepagents_cli.agent_memory import AgentMemoryMiddleware
 from deepagents_cli.config import config
+
+from mig_core.agent_memory import AgentMemoryMiddleware
 
 from agent.prompts import get_main_prompt
 from agent.subagents import code_agent, critique_agent, planning_agent, validator_agent
