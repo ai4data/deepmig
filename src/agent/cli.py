@@ -115,7 +115,7 @@ async def run_deepmig_session(
     # Calculate baseline token count for accurate token tracking
     agent_dir = Path.home() / ".deepagents" / assistant_id
     main_prompt = get_main_prompt()
-    baseline_tokens = calculate_baseline_tokens(model, agent_dir, main_prompt)
+    baseline_tokens = calculate_baseline_tokens(model, agent_dir, main_prompt, assistant_id)
 
     # Show DeepMig banner instead of default
     console.clear()
