@@ -105,13 +105,17 @@ def create_migration_agent(
     agent_dir = Path.home() / ".deepagents" / assistant_id
     agent_dir.mkdir(parents=True, exist_ok=True)
 
+    # Memories directory - where /memories/ virtual route points to
+    memories_dir = agent_dir / "memories"
+    memories_dir.mkdir(parents=True, exist_ok=True)
+
     # Initialize agent.md with default content if it doesn't exist
     agent_md = agent_dir / "agent.md"
     if not agent_md.exists():
         agent_md.write_text("# DeepMig Agent Memory\n\nThis file stores the agent's long-term memory.\n")
 
-    # Long-term backend for /memories/ route
-    long_term_backend = FilesystemBackend(root_dir=agent_dir, virtual_mode=True)
+    # Long-term backend for /memories/ route - maps to memories_dir
+    long_term_backend = FilesystemBackend(root_dir=memories_dir, virtual_mode=True)
 
     # Composite backend: local filesystem + /memories/ route
     composite_backend = CompositeBackend(

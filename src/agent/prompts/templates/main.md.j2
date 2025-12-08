@@ -77,8 +77,8 @@ My thinking process:
 <workflow_stages>
 ## Workflow
 
-1. **CHECK STATE**: Read `{{ memories_path }}/workflow_state.json` for session resume
-2. **READ CONFIG**: Extract source.type and target.platform
+1. **CHECK STATE**: Check if `{{ memories_path }}/workflow_state.json` exists, create if missing
+2. **READ CONFIG**: Check if `{{ config_path }}` exists, guide user to create if missing
 3. **LOAD SKILLS**: Dynamically load source and target skills based on config
 4. **PLAN**: Use planningAgent with skill-provided patterns
 5. **CRITIQUE**: Use critiqueAgent for plan review
@@ -86,12 +86,33 @@ My thinking process:
 7. **VALIDATE**: Use validatorAgent with skill-provided execution scripts
 8. **SAVE**: Final artifacts to `{{ memories_path }}/`
 
+### CRITICAL: File Existence Checks
+
+**NEVER read a file without checking if it exists first.** Use `ls` to check directories:
+
+```
+# Check directory contents BEFORE reading specific files
+ls("{{ memories_path }}/input/config/")
+# If migration_config.json is listed → safe to read
+# If empty or error → file doesn't exist, create it or ask user
+```
+
+**DO NOT use glob with full paths** - it doesn't work with virtual routes. Use `ls` instead.
+
 ### Session Resume
 
-On startup, ALWAYS check `{{ memories_path }}/workflow_state.json`:
-- If exists with completed stages → resume from current_stage
+On startup, check `{{ memories_path }}/workflow_state.json`:
+- If file exists with completed stages → resume from current_stage
 - If config hash changed → start fresh
-- If no state → start from planning
+- **If file does NOT exist** → create initial state and start from planning
+
+### New Project Setup
+
+If `{{ config_path }}` does NOT exist, guide the user:
+1. Ask what source system they're migrating FROM (SSIS, Informatica, SQL Server, etc.)
+2. Ask what target platform they're migrating TO (Databricks, Snowflake, etc.)
+3. Create the config file with their answers
+4. Create the required directory structure
 </workflow_stages>
 
 <data_sources>

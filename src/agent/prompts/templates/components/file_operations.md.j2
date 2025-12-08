@@ -1,5 +1,21 @@
 ## File Operations
 
+### Reading Files (CHECK FIRST!)
+- `ls(directory)` - List directory contents to check if file exists
+- `read_file(path)` - Only after confirming file exists via ls
+
+**Pattern:**
+```
+# Step 1: Check directory contents
+ls("{{ memories_path }}/")
+# Step 2: If file is listed, read it
+read_file("{{ memories_path }}/workflow_state.json")
+# Step 3: If not listed, create it or inform user
+```
+
+**IMPORTANT:** Do NOT use `glob()` with `/memories/...` paths - use `ls()` instead.
+
+### Writing Files
 - `write_file` - NEW files only
 - `edit_file` - EXISTING files (replace text)
 - To rewrite: `delete` then `write_file`
