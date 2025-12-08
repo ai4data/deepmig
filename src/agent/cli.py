@@ -16,11 +16,24 @@ try:
 except ImportError:
     pass  # python-dotenv not installed, rely on system env vars
 
+import inspect
+
 from deepagents_cli.agent import list_agents, reset_agent
 from deepagents_cli.config import COLORS, SessionState, console
 from deepagents_cli.main import check_cli_dependencies
-from deepagents_cli.token_utils import calculate_baseline_tokens
+from deepagents_cli.token_utils import calculate_baseline_tokens as _calculate_baseline_tokens
 from deepagents_cli.ui import show_help
+
+
+def calculate_baseline_tokens(model, agent_dir: Path, system_prompt: str, assistant_id: str) -> int:
+    """Wrapper for calculate_baseline_tokens that handles different API versions."""
+    sig = inspect.signature(_calculate_baseline_tokens)
+    if len(sig.parameters) >= 4:
+        # Official version: (model, agent_dir, system_prompt, assistant_id)
+        return _calculate_baseline_tokens(model, agent_dir, system_prompt, assistant_id)
+    else:
+        # Older version: (model, agent_dir, system_prompt)
+        return _calculate_baseline_tokens(model, agent_dir, system_prompt)
 
 from agent.agent import create_migration_agent
 from agent.prompts import get_main_prompt
