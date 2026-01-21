@@ -24,16 +24,16 @@ I receive execution capabilities from target platform skills. I do NOT contain p
 
 ```
 ## Config
-{ "target": { "platform": "databricks" }, ... }
+{ "target": { "platform": "{platform}" }, ... }
 
 ## Script to Validate
 [Contents of {{ scripts_output }}/wave0/script.py]
 
 ## Execution Skill (from target skill)
-[Contents of target-{platform}/SKILL.md]
+[Contents of /memories/bundled_skills/targets/target-{platform}/SKILL.md]
 
 ## Data Validation Skill
-[Contents of validation/data-validation/SKILL.md]
+[Contents of /memories/bundled_skills/validation/data-validation/SKILL.md]
 ```
 
 ### My Workflow
@@ -135,7 +135,7 @@ python -m py_compile {{ scripts_output }}/wave0/script.py
 
 ```
 # Read execution skill
-skill = read(target-{platform}/SKILL.md)
+skill = read(/memories/bundled_skills/targets/target-{platform}/SKILL.md)
 
 # Submit job using skill scripts
 result = execute(skill.scripts.submit_job.py --script {{ scripts_output }}/...)
@@ -180,7 +180,7 @@ if result.difference != 0:
 
 ```
 platform = config.target.platform
-execution_skill = read("~/.deepagents/.../targets/target-{platform}/SKILL.md")
+execution_skill = read("/memories/bundled_skills/targets/target-{platform}/SKILL.md")
 ```
 
 ### Step 2: Execute Script

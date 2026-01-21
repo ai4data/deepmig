@@ -10,6 +10,7 @@ from langchain_openai import AzureChatOpenAI
 
 from agent.prompts import (
     get_code_prompt,
+    get_code_review_prompt,
     get_critique_prompt,
     get_planning_prompt,
     get_validator_prompt,
@@ -36,7 +37,13 @@ def get_subagent_model(deployment_env_var: str):
     )
 
 
-def _create_subagent(name: str, description: str, system_prompt: str, model_env_var: str) -> dict:
+def _create_subagent(
+    name: str,
+    description: str,
+    system_prompt: str,
+    model_env_var: str,
+    tools: list | None = None,
+) -> dict:
     """Create a subagent definition, only including model if set.
 
     Args:
@@ -44,6 +51,7 @@ def _create_subagent(name: str, description: str, system_prompt: str, model_env_
         description: Subagent description
         system_prompt: System prompt for the subagent
         model_env_var: Environment variable for the model deployment
+        tools: Optional list of tools for the subagent
 
     Returns:
         Subagent dictionary (without model key if not configured)
@@ -56,7 +64,36 @@ def _create_subagent(name: str, description: str, system_prompt: str, model_env_
     model = get_subagent_model(model_env_var)
     if model is not None:
         agent["model"] = model
+    if tools:
+        agent["tools"] = tools
     return agent
+
+
+def create_validator_agent_with_tools(tools: list) -> dict:
+    """Create validator agent with execution tools.
+
+    This is called from agent.py where the tools are available.
+
+    Args:
+        tools: List of execution tools (e.g., databricks_submit_job, databricks_run_sql)
+
+    Returns:
+        Validator agent definition with tools
+    """
+    return _create_subagent(
+        name="validatorAgent",
+        description=(
+            "Expert QA engineer that validates migration scripts by executing them on "
+            "the target platform and verifying data integrity. Validates data ingestion "
+            "(source vs target comparison) and transformations (key integrity, "
+            "referential integrity, data quality). Uploads code to target platform, executes it, "
+            "and generates comprehensive validation reports. Adapts to platform from config. "
+            "Pass the script content and validation configuration in the task description."
+        ),
+        system_prompt=get_validator_prompt(),
+        model_env_var="AZURE_OPENAI_VALIDATOR_MODEL",
+        tools=tools,
+    )
 
 
 # Planning sub-agent for migration analysis and planning
@@ -103,18 +140,21 @@ code_agent = _create_subagent(
     model_env_var="AZURE_OPENAI_CODE_MODEL",
 )
 
-# Validation sub-agent for executing and validating migrations
-# Uses AZURE_OPENAI_VALIDATOR_MODEL if set
-validator_agent = _create_subagent(
-    name="validatorAgent",
+# Code review sub-agent for validating generated code BEFORE execution
+# Uses AZURE_OPENAI_CODE_REVIEW_MODEL if set
+code_review_agent = _create_subagent(
+    name="codeReviewAgent",
     description=(
-        "Expert QA engineer that validates migration scripts by executing them on "
-        "the target platform and verifying data integrity. Validates data ingestion "
-        "(source vs target comparison) and transformations (key integrity, "
-        "referential integrity, data quality). Uploads code to target platform, executes it, "
-        "and generates comprehensive validation reports. Adapts to platform from config. "
-        "Pass the script content and validation configuration in the task description."
+        "Schema Guardian that validates generated migration code BEFORE execution. "
+        "Performs static analysis to catch schema mismatches, cross-wave column name "
+        "inconsistencies, syntax errors, and config violations. Use AFTER code generation "
+        "but BEFORE submitting scripts to the cluster. Prevents broken code from wasting "
+        "compute resources. Returns APPROVED, NEEDS_FIX, or REJECTED verdicts with "
+        "specific fixes when issues are found."
     ),
-    system_prompt=get_validator_prompt(),
-    model_env_var="AZURE_OPENAI_VALIDATOR_MODEL",
+    system_prompt=get_code_review_prompt(),
+    model_env_var="AZURE_OPENAI_CODE_REVIEW_MODEL",
 )
+
+# Note: validator_agent is created dynamically in agent.py with tools
+# Use create_validator_agent_with_tools() to create it with execution tools

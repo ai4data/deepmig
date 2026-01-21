@@ -6,7 +6,7 @@ defaults:
   memories_path: "/memories"
   config_path: "/memories/input/config/migration_config.json"
   metadata_path: "/memories/input/metadata"
-  graph_path: "/memories/input/graph/graph.json"
+  graph_path: "/memories/input/graph/graph_summary.yaml"
   codebase_path: "/memories/input/codebase"
 
   # Output paths
@@ -16,6 +16,7 @@ defaults:
 
   # Workflow settings
   max_planning_attempts: 2
+  max_coding_attempts: 2
   critique_approval_threshold: 8
   broadcast_join_threshold: 100000
 
@@ -29,6 +30,9 @@ agents:
     pass
   code:
     # Code agent specific settings
+    pass
+  code_review:
+    # Code review agent specific settings
     pass
   validator:
     # Validator agent specific settings

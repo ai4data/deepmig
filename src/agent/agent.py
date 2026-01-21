@@ -9,6 +9,8 @@ from pathlib import Path
 from deepagents import create_deep_agent
 from deepagents.backends.composite import CompositeBackend
 from deepagents.backends.filesystem import FilesystemBackend
+
+from mig_core.backends import EncodingAwareFilesystemBackend
 from langchain.agents.middleware import InterruptOnConfig
 from langchain.agents.middleware.types import AgentState
 from langchain.messages import ToolCall
@@ -18,9 +20,11 @@ from langgraph.runtime import Runtime
 from deepagents_cli.config import config
 
 from mig_core.agent_memory import AgentMemoryMiddleware
+from mig_core.tools import TargetToolsMiddleware, LocalToolsMiddleware
+from mig_core.workflow_middleware import WorkflowMiddleware
 
 from agent.prompts import get_main_prompt
-from agent.subagents import code_agent, critique_agent, planning_agent, validator_agent
+from agent.subagents import code_agent, code_review_agent, critique_agent, planning_agent, create_validator_agent_with_tools
 from mig_core.skills import SkillsMiddleware, get_bundled_skills_dir
 
 
@@ -32,9 +36,10 @@ def _sync_bundled_skills(bundled_skills_dir: Path, agent_dir: Path) -> Path:
         agent_dir: Agent's directory (e.g., ~/.deepagents/migration-planner/).
 
     Returns:
-        Path to the copied bundled skills in agent_dir.
+        Path to the copied bundled skills in agent_dir/memories/.
     """
-    target_dir = agent_dir / "bundled_skills"
+    # Place inside memories/ so /memories/bundled_skills/ route works
+    target_dir = agent_dir / "memories" / "bundled_skills"
 
     # Only copy if bundled skills are newer or target doesn't exist
     if not target_dir.exists():
@@ -110,16 +115,19 @@ def create_migration_agent(
     memories_dir.mkdir(parents=True, exist_ok=True)
 
     # Initialize agent.md with default content if it doesn't exist
-    agent_md = agent_dir / "agent.md"
+    # Note: agent.md is inside memories/ so it's accessible via /memories/agent.md
+    agent_md = memories_dir / "agent.md"
     if not agent_md.exists():
         agent_md.write_text("# DeepMig Agent Memory\n\nThis file stores the agent's long-term memory.\n")
 
     # Long-term backend for /memories/ route - maps to memories_dir
-    long_term_backend = FilesystemBackend(root_dir=memories_dir, virtual_mode=True)
+    # Uses encoding-aware backend to handle non-UTF-8 files gracefully
+    long_term_backend = EncodingAwareFilesystemBackend(root_dir=memories_dir, virtual_mode=True)
 
     # Composite backend: local filesystem + /memories/ route
+    # Default backend also uses encoding-aware version for consistency
     composite_backend = CompositeBackend(
-        default=FilesystemBackend(),  # Current working directory
+        default=EncodingAwareFilesystemBackend(),  # Current working directory
         routes={"/memories/": long_term_backend},  # Agent memories
     )
 
@@ -135,7 +143,19 @@ def create_migration_agent(
     else:
         bundled_skills_dir = None
 
-    # Middleware: memory management + skills
+    # Create target tools middleware to get platform-specific tools
+    target_tools_middleware = TargetToolsMiddleware(backend=composite_backend)
+    # Pass memories_dir so local_execute can resolve /memories/ virtual paths
+    local_tools_middleware = LocalToolsMiddleware(memories_dir=memories_dir)
+
+    # Get execution tools for validator agent
+    # Combines local tools (always available) and platform tools (config-driven)
+    validator_tools = local_tools_middleware.tools + target_tools_middleware.tools
+
+    # Create validator agent with execution tools
+    validator_agent = create_validator_agent_with_tools(tools=validator_tools)
+
+    # Middleware: memory management + skills + workflow + execution tools
     # Note: SummarizationMiddleware is already added by create_deep_agent
     agent_middleware = [
         AgentMemoryMiddleware(backend=long_term_backend, memory_path="/memories/"),
@@ -145,6 +165,9 @@ def create_migration_agent(
             project_skills_dir=project_skills_dir,
             bundled_skills_dir=bundled_skills_dir,
         ),
+        WorkflowMiddleware(agent_dir=agent_dir),
+        local_tools_middleware,  # Local script execution (always available)
+        target_tools_middleware,  # Platform tools loaded based on config
     ]
 
     # Configure human-in-the-loop for task tool (subagents)
@@ -160,7 +183,7 @@ def create_migration_agent(
     agent = create_deep_agent(
         model=model,
         system_prompt=main_prompt,
-        subagents=[planning_agent, critique_agent, code_agent, validator_agent],
+        subagents=[planning_agent, critique_agent, code_agent, code_review_agent, validator_agent],
         backend=composite_backend,
         middleware=agent_middleware,
         interrupt_on=interrupt_on if interrupt_on else None,

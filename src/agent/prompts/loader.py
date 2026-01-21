@@ -127,6 +127,10 @@ class PromptLoader:
         """Get the validation sub-agent prompt."""
         return self.get_subagent_prompt("validator", **kwargs)
 
+    def get_code_review_prompt(self, **kwargs: Any) -> str:
+        """Get the code review sub-agent prompt."""
+        return self.get_subagent_prompt("code_review", **kwargs)
+
     def get_component(self, component_name: str, **kwargs: Any) -> str:
         """Get a single component template.
 
@@ -208,3 +212,8 @@ def get_code_prompt(**kwargs: Any) -> str:
 def get_validator_prompt(**kwargs: Any) -> str:
     """Get the validation sub-agent prompt (backward compatible)."""
     return get_loader().get_validator_prompt(**kwargs)
+
+
+def get_code_review_prompt(**kwargs: Any) -> str:
+    """Get the code review sub-agent prompt (backward compatible)."""
+    return get_loader().get_code_review_prompt(**kwargs)

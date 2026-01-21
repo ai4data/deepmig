@@ -28,6 +28,7 @@ from .loader import (
     get_critique_prompt,
     get_code_prompt,
     get_validator_prompt,
+    get_code_review_prompt,
 )
 
 __all__ = [
@@ -40,4 +41,5 @@ __all__ = [
     "get_critique_prompt",
     "get_code_prompt",
     "get_validator_prompt",
+    "get_code_review_prompt",
 ]

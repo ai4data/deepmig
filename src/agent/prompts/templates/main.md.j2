@@ -72,6 +72,37 @@ My thinking process:
 4. Use skill's scripts/parse_dtsx.py if available
 5. Extract data flows and transformations
 </example>
+
+<example>
+User: "Execute wave 1 transformations"
+
+My thinking process:
+1. Read {{ scripts_output }}/wave1/*.py (generated scripts)
+2. Read {{ scripts_output }}/wave0/*.py (for schema reference)
+3. Read config and plan for context
+4. Invoke codeReviewAgent with all inputs
+5. Check verdict:
+   - If APPROVED → submit_job("{{ scripts_output }}/wave1/wave1_dimensions.py")
+   - If NEEDS_FIX → invoke codeAgent with fix list, then review again
+   - If REJECTED → inform user, may need to re-plan
+6. After successful execution → invoke validatorAgent to check row counts
+7. Save review report to {{ logs_output }}/code_review_wave1.md
+</example>
+
+<example>
+User: "The code review found issues, fix them"
+
+My thinking process:
+1. Read the NEEDS_FIX issues from codeReviewAgent output
+2. Read the current script that needs fixes
+3. Invoke codeAgent with:
+   - Original plan context
+   - The specific issues to fix
+   - Code patterns for reference
+4. After codeAgent outputs fixed script
+5. Re-invoke codeReviewAgent on the fixed script
+6. Repeat until APPROVED or max attempts reached
+</example>
 </few_shot_examples>
 
 <workflow_stages>
@@ -83,8 +114,10 @@ My thinking process:
 4. **PLAN**: Use planningAgent with skill-provided patterns
 5. **CRITIQUE**: Use critiqueAgent for plan review
 6. **CODE**: Use codeAgent with skill-provided code templates
-7. **VALIDATE**: Use validatorAgent with skill-provided execution scripts
-8. **SAVE**: Final artifacts to `{{ memories_path }}/`
+7. **CODE REVIEW**: Use codeReviewAgent to validate code BEFORE execution
+8. **EXECUTE**: Main agent executes approved scripts using `submit_job` or `local_execute`
+9. **VALIDATE**: Use validatorAgent to verify data integrity post-execution
+10. **SAVE**: Final artifacts to `{{ memories_path }}/`
 
 ### CRITICAL: File Existence Checks
 
@@ -98,6 +131,54 @@ ls("{{ memories_path }}/input/config/")
 ```
 
 **DO NOT use glob with full paths** - it doesn't work with virtual routes. Use `ls` instead.
+
+### CRITICAL: Code Review → Execution → Validation Pattern
+
+**Code flows through review BEFORE execution.** This prevents broken scripts from wasting cluster resources.
+
+#### The Code Review Gate
+
+After codeAgent generates scripts, **ALWAYS** invoke codeReviewAgent before execution. The code review agent evaluates code across 6 dimensions:
+
+| Dimension | What It Checks |
+|-----------|----------------|
+| **Correctness** | Data flow logic, joins, aggregations, schema references |
+| **Consistency** | Cross-wave compatibility, naming conventions |
+| **Performance** | Anti-patterns (collect, unnecessary count), optimizations |
+| **Security** | Hardcoded credentials, config usage, PII handling |
+| **Reliability** | Error handling, idempotency, validation |
+| **Maintainability** | Code organization, readability, documentation |
+
+#### Code Review Verdicts
+
+| Verdict | Meaning | Next Action |
+|---------|---------|-------------|
+| **APPROVED** | Code is ready | Execute with `submit_job` or `local_execute` |
+| **NEEDS_FIX** | Fixable issues found | Return to codeAgent with fix list |
+| **REJECTED** | Fundamental problems | Escalate to user or re-plan |
+
+#### Execution Flow
+
+```
+┌─────────────┐     ┌─────────────────┐     ┌─────────────┐     ┌───────────────┐
+│  codeAgent  │ ──▶ │ codeReviewAgent │ ──▶ │   Execute   │ ──▶ │ validatorAgent│
+│  (generate) │     │    (review)     │     │  (run job)  │     │   (validate)  │
+└─────────────┘     └─────────────────┘     └─────────────┘     └───────────────┘
+                           │                       ▲
+                           │ NEEDS_FIX             │ APPROVED
+                           ▼                       │
+                    ┌─────────────┐                │
+                    │  codeAgent  │ ───────────────┘
+                    │   (fix)     │
+                    └─────────────┘
+```
+
+**Execution tools (main agent calls directly):**
+- `submit_job` - Submit scripts to target platform cluster (for data already in cloud)
+- `local_execute` - Execute scripts locally (for localhost/on-prem sources)
+
+**Post-Execution validation (validatorAgent):**
+- `run_sql` - Query target platform for row counts and data quality checks
 
 ### Session Resume
 
@@ -125,8 +206,9 @@ If `{{ config_path }}` does NOT exist, guide the user:
 ├── migration_plan.md          # Planning agent output
 ├── scripts/                   # Coding agent output
 │   └── wave{N}/*.py
-├── logs/                      # Validation logs
-│   └── validation_*.md
+├── logs/                      # Review and validation logs
+│   ├── code_review_wave{N}.md # Code review reports
+│   └── validation_wave{N}.md  # Validation reports
 └── workflow_state.json        # Session state
 ```
 
@@ -140,21 +222,42 @@ If `{{ config_path }}` does NOT exist, guide the user:
 
 State file: `{{ memories_path }}/workflow_state.json`
 
-```json
-{
-  "current_stage": "critique",
-  "completed_stages": ["planning"],
-  "attempts": {"planning": 1, "critique": 0},
-  "config_hash": "abc123",
-  "last_updated": "{{ datetime }}"
-}
-```
+**IMPORTANT**: Use the workflow tools to manage state. Do NOT edit the file directly.
+
+### Available Tools
+
+- `get_workflow_state()` - Check current stage and completed stages
+- `complete_stage("stage_name")` - Mark a stage as complete and advance
 
 ### Stage Transitions
-- `planning` → `critique` (after saving migration_plan.md)
-- `critique` → `coding` (after plan approved, score ≥ {{ critique_approval_threshold }}/10)
-- `coding` → `validation` (after all scripts generated)
-- `validation` → `completed` (after validation passes)
+
+Call `complete_stage()` when you finish each stage:
+
+| When you... | Call |
+|-------------|------|
+| Save migration_plan.md | `complete_stage("planning")` |
+| Plan approved (score ≥ {{ critique_approval_threshold }}/10) | `complete_stage("critique")` |
+| All scripts generated | `complete_stage("coding")` |
+| Code review returns APPROVED | `complete_stage("code_review")` |
+| Scripts executed successfully | `complete_stage("execution")` |
+| Data validation passes | `complete_stage("validation")` |
+
+### Example Usage
+
+```python
+# Check where we are
+get_workflow_state()
+# Returns: {"current_stage": "coding", "completed_stages": ["planning", "critique"], ...}
+
+# After finishing coding
+complete_stage("coding")
+# Returns: {"success": true, "previous_stage": "coding", "current_stage": "validation", ...}
+```
+
+### Important
+- Always call `complete_stage()` after finishing each stage's work
+- The tool will reject if you try to complete the wrong stage
+- Use `get_workflow_state()` if unsure which stage you're in
 </workflow_state>
 
 <sub_agents>
@@ -170,6 +273,9 @@ Creates migration plans.
 2. Metadata: `{{ metadata_path }}/*.json`
 3. Graph: `{{ graph_path }}`
 
+**⚠️ CRITICAL: Read the ENTIRE graph file!**
+The graph file (`{{ graph_path }}`) is an optimized YAML knowledge graph. The planning agent MUST receive the COMPLETE file to reason holistically over the topology. **DO NOT use default read limits.** Read with a high limit (e.g., 10000 lines) to ensure the full graph is captured.
+
 **Fallback Input (Only if Graph insufficient):**
 - Raw Codebase: `{{ codebase_path }}/` - Trace from graph node links
 
@@ -180,10 +286,11 @@ Creates migration plans.
 ```
 config = read("{{ config_path }}")
 metadata = read("{{ metadata_path }}/source_schema.json")
-graph = read("{{ graph_path }}")
-source_skill = read("~/.deepagents/.../sources/source-{type}/SKILL.md")
-target_skill = read("~/.deepagents/.../targets/target-{platform}/SKILL.md")
-type_mappings = read("~/.deepagents/.../targets/target-{platform}/type-mappings.json")
+# CRITICAL: Read the FULL graph - do not truncate!
+graph = read("{{ graph_path }}", limit=10000)
+source_skill = read("/memories/bundled_skills/sources/source-{type}/SKILL.md")
+target_skill = read("/memories/bundled_skills/targets/target-{platform}/SKILL.md")
+type_mappings = read("/memories/bundled_skills/targets/target-{platform}/type-mappings.json")
 
 task(
     description="Create migration plan.\n\n## Config\n{config}\n\n## Metadata\n{metadata}\n\n## Graph\n{graph}\n\n## Source Skill\n{source_skill}\n\n## Target Skill\n{target_skill}\n\n## Type Mappings\n{type_mappings}",
@@ -204,7 +311,7 @@ Reviews migration plans for fidelity and completeness.
 ```
 plan = read("{{ plan_output }}")
 config = read("{{ config_path }}")
-target_skill = read("~/.deepagents/.../targets/target-{platform}/SKILL.md")
+target_skill = read("/memories/bundled_skills/targets/target-{platform}/SKILL.md")
 
 task(
     description="Review migration plan.\n\n## Plan\n{plan}\n\n## Config\n{config}\n\n## Target Skill\n{target_skill}",
@@ -236,14 +343,116 @@ Generates migration scripts from the approved plan.
 ```
 plan = read("{{ plan_output }}")
 config = read("{{ config_path }}")
-patterns = read("~/.deepagents/.../targets/target-{platform}/code-patterns.md")
-type_mappings = read("~/.deepagents/.../targets/target-{platform}/type-mappings.json")
+patterns = read("/memories/bundled_skills/targets/target-{platform}/code-patterns.md")
+type_mappings = read("/memories/bundled_skills/targets/target-{platform}/type-mappings.json")
 
 task(
     description="Generate script.\n\n## Plan\n{plan}\n\n## Config\n{config}\n\n## Code Patterns\n{patterns}\n\n## Type Mappings\n{type_mappings}",
     subagent_type="codeAgent"
 )
 ```
+
+### codeReviewAgent
+Reviews generated ETL/ELT code for production readiness BEFORE execution.
+
+**When to Use:**
+- ALWAYS after codeAgent generates new scripts
+- Before executing any wave with `submit_job` or `local_execute`
+- When fixing code after a failed execution
+
+**What It Reviews (6 Dimensions):**
+
+| Dimension | Key Checks |
+|-----------|------------|
+| Correctness | Joins, aggregations, transformations match plan |
+| Consistency | Column names match across waves, naming conventions |
+| Performance | No collect() on large data, proper caching |
+| Security | No hardcoded secrets, config-driven values |
+| Reliability | Error handling, idempotency, logging |
+| Maintainability | Code organization, meaningful names |
+
+**Primary Input (Under Review):**
+- Generated Scripts: `{{ scripts_output }}/wave{N}/*.py`
+
+**Reference Inputs (For Verification):**
+
+| Input | Purpose |
+|-------|---------|
+| Previous Wave Scripts | Verify column names match what was created |
+| Config | Verify config values used correctly |
+| Migration Plan | Verify implementation matches specification |
+| Code Patterns | Verify platform best practices followed |
+
+**Output:**
+The agent returns a Code Review Report with:
+- **Verdict**: APPROVED / NEEDS_FIX / REJECTED
+- **Issue counts** by severity (Critical, Major, Minor)
+- **Specific fixes** with line numbers and code examples
+- **Checklist summary** across all 6 dimensions
+
+**Post-Review Decision Logic:**
+
+| Verdict | Action |
+|---------|--------|
+| **APPROVED** | Proceed to execute with `submit_job` or `local_execute` |
+| **NEEDS_FIX** | Re-invoke codeAgent with the fix list (max {{ max_coding_attempts }} attempts) |
+| **REJECTED** | Escalate to user - may need re-planning |
+
+**Invocation Example:**
+
+```python
+# 1. Read all necessary context
+script = read("{{ scripts_output }}/wave1/wave1_dimensions.py")
+config = read("{{ config_path }}")
+plan = read("{{ plan_output }}")
+
+# For wave 1+, also read previous wave scripts for cross-wave consistency
+wave0_scripts = read("{{ scripts_output }}/wave0/wave0_bronze_ingestion.py")
+
+# 2. Invoke code review agent
+review_result = task(
+    description="""Review wave1 transformation scripts for production readiness.
+
+## Script Under Review
+{script}
+
+## Previous Wave Scripts (for schema reference)
+{wave0_scripts}
+
+## Configuration
+{config}
+
+## Migration Plan (expected behavior)
+{plan}
+
+Please review for:
+1. Correctness - Does code match the plan?
+2. Consistency - Do column names match wave0 output?
+3. Performance - Any anti-patterns?
+4. Security - Any hardcoded values?
+5. Reliability - Proper error handling?
+6. Maintainability - Clear code structure?
+""",
+    subagent_type="codeReviewAgent"
+)
+
+# 3. Handle the verdict
+if "APPROVED" in review_result:
+    # Safe to execute
+    submit_job(script_path="{{ scripts_output }}/wave1/wave1_dimensions.py")
+elif "NEEDS_FIX" in review_result:
+    # Extract fixes and send back to codeAgent
+    task(
+        description="Fix the following issues:\n\n{review_result}",
+        subagent_type="codeAgent"
+    )
+else:  # REJECTED
+    # Escalate to user
+    print("Code review rejected. Manual intervention required.")
+```
+
+**Save Review Reports:**
+Save code review reports to `{{ logs_output }}/code_review_wave{N}.md` for audit trail.
 
 ### validatorAgent
 Validates and executes migration scripts.
@@ -264,8 +473,8 @@ Validates and executes migration scripts.
 ```
 config = read("{{ config_path }}")
 script = read("{{ scripts_output }}/wave{N}/{script_name}.py")
-execution_skill = read("~/.deepagents/.../targets/target-{platform}/SKILL.md")
-validation_skill = read("~/.deepagents/.../validation/data-validation/SKILL.md")
+execution_skill = read("/memories/bundled_skills/targets/target-{platform}/SKILL.md")
+validation_skill = read("/memories/bundled_skills/validation/data-validation/SKILL.md")
 
 task(
     description="Validate and execute.\n\n## Config\n{config}\n\n## Script\n{script}\n\n## Execution Skill\n{execution_skill}\n\n## Validation Skill\n{validation_skill}",

@@ -23,7 +23,19 @@ import inspect
 import shutil
 from deepagents_cli.agent import list_agents, reset_agent as _reset_agent
 from deepagents_cli.config import COLORS, SessionState, console
+from rich.console import Console
 from deepagents_cli.main import check_cli_dependencies
+
+# Override colors with Metazense brand palette
+COLORS.update({
+    "primary": "#8142ff",    # Metazense primary purple
+    "dim": "#706d72",        # Grey3 - secondary text
+    "user": "#ffffff",       # White
+    "agent": "#aa80ff",      # Purple-dark - agent output (softer for readability)
+    "thinking": "#969499",   # Grey4 - thinking/processing
+    "tool": "#8142ff",       # Primary purple - tool calls
+})
+
 from deepagents_cli.token_utils import calculate_baseline_tokens as _calculate_baseline_tokens
 from deepagents_cli.ui import show_help
 
@@ -58,11 +70,79 @@ def reset_agent(agent_name: str, source_agent: str | None = None, hard: bool = F
         _reset_agent(agent_name, source_agent)
 
 
+def _upload_config_to_databricks(
+    agent_name: str,
+    config: dict,
+    config_file: Path,
+    console: Console,
+) -> None:
+    """Upload config file to Databricks workspace for cluster-executed scripts.
+
+    Args:
+        agent_name: Name of the agent (used in workspace path)
+        config: Parsed migration config dict
+        config_file: Path to the local config file
+        console: Rich console for output
+    """
+    try:
+        from databricks.sdk import WorkspaceClient
+
+        # Get credentials from config
+        credentials = config.get("credentials", {}).get("databricks", {})
+        workspace_url = config.get("target", {}).get("workspace_url")
+        token = credentials.get("personal_access_token")
+
+        if not workspace_url or not token:
+            console.print("  [yellow]Skipping Databricks upload: missing workspace_url or token in config[/yellow]")
+            return
+
+        console.print()
+        console.print("[bold]Uploading config to Databricks workspace...[/bold]")
+
+        # Create workspace client
+        client = WorkspaceClient(host=workspace_url, token=token)
+
+        # Target path in workspace: /Workspace/Shared/{agent_name}/config/migration_config.json
+        workspace_path = f"/Workspace/Shared/{agent_name}/config/migration_config.json"
+
+        # Read config file content
+        with open(config_file, "rb") as f:
+            content = f.read()
+
+        # Upload to workspace using the Files API for workspace files
+        # First, try to create parent directory (ignore if exists)
+        try:
+            client.workspace.mkdirs(f"/Workspace/Shared/{agent_name}/config")
+        except Exception:
+            pass  # Directory may already exist
+
+        # Use workspace.import_ for files (with AUTO format for JSON)
+        from databricks.sdk.service.workspace import ImportFormat
+        import base64
+
+        client.workspace.import_(
+            path=workspace_path,
+            content=base64.b64encode(content).decode("utf-8"),
+            format=ImportFormat.AUTO,
+            overwrite=True,
+        )
+
+        console.print(f"  [green]+[/green] Uploaded config to {workspace_path}")
+        console.print(f"  [dim]Cluster scripts can read config from: {workspace_path}[/dim]")
+
+    except ImportError:
+        console.print("  [yellow]Skipping Databricks upload: databricks-sdk not installed[/yellow]")
+    except Exception as e:
+        console.print(f"  [yellow]Warning: Could not upload to Databricks: {e}[/yellow]")
+        console.print("  [dim]You may need to manually upload the config later[/dim]")
+
+
 def init_project(
     agent_name: str,
     project_dir: str = ".",
     source_type: str | None = None,
     target_platform: str | None = None,
+    input_path: str | None = None,
 ) -> None:
     """Initialize a new DeepMig migration project.
 
@@ -73,6 +153,7 @@ def init_project(
         project_dir: Directory to create project in
         source_type: Source system type (if None, prompt interactively)
         target_platform: Target platform (if None, prompt interactively)
+        input_path: Path to existing input folder to copy (optional)
     """
     from prompt_toolkit import prompt
     from prompt_toolkit.shortcuts import radiolist_dialog
@@ -121,10 +202,15 @@ def init_project(
         ("other", "Other"),
     ]
 
-    # Get project name
+    # Get project name (skip prompt if running in non-interactive mode with --input)
     console.print("[bold]Project Configuration[/bold]")
     console.print()
-    project_name = prompt(f"  Project name [{agent_name}]: ").strip() or agent_name
+    if input_path and source_type and target_platform:
+        # Non-interactive mode: use agent_name as project_name
+        project_name = agent_name
+        console.print(f"  Project name: {project_name}")
+    else:
+        project_name = prompt(f"  Project name [{agent_name}]: ").strip() or agent_name
 
     # Get source type
     if source_type is None:
@@ -182,31 +268,71 @@ def init_project(
         except ValueError:
             console.print(f"  [green]+[/green] Created {dir_path.relative_to(project_path)}/")
 
-    # Create migration_config.json
-    config = {
-        "project_name": project_name,
-        "source": {
-            "type": source_type,
-            "connection": {
-                "_comment": "Add your source connection details here"
-            }
-        },
-        "target": {
-            "platform": target_platform,
-            "connection": {
-                "_comment": "Add your target connection details here"
-            }
-        },
-        "options": {
-            "wave_size": 10,
-            "parallel_jobs": 4
-        }
-    }
+    # If input_path provided, copy existing input folder instead of creating template
+    if input_path:
+        input_source = Path(input_path).resolve()
+        if not input_source.exists():
+            console.print(f"  [red]Error: Input path does not exist: {input_source}[/red]")
+            return
 
-    config_file = agent_input_path / "config" / "migration_config.json"
-    with open(config_file, "w", encoding="utf-8") as f:
-        json.dump(config, f, indent=2)
-    console.print(f"  [green]+[/green] Created ~/.deepagents/{agent_name}/memories/input/config/migration_config.json")
+        console.print()
+        console.print("[bold]Copying input folder...[/bold]")
+
+        # Copy contents of input folder to agent_input_path
+        for item in input_source.iterdir():
+            dest = agent_input_path / item.name
+            if item.is_dir():
+                if dest.exists():
+                    shutil.rmtree(dest)
+                shutil.copytree(item, dest)
+                console.print(f"  [green]+[/green] Copied {item.name}/ -> ~/.deepagents/{agent_name}/memories/input/{item.name}/")
+            else:
+                shutil.copy2(item, dest)
+                console.print(f"  [green]+[/green] Copied {item.name} -> ~/.deepagents/{agent_name}/memories/input/{item.name}")
+
+        # Load the actual config to detect target platform and upload if Databricks
+        config_file = agent_input_path / "config" / "migration_config.json"
+        if config_file.exists():
+            with open(config_file, "r", encoding="utf-8") as f:
+                config = json.load(f)
+
+            # Override source/target from config if not specified via CLI
+            if source_type is None:
+                source_type = config.get("source", {}).get("type")
+            if target_platform is None:
+                target_platform = config.get("target", {}).get("platform")
+
+            # Upload config to Databricks workspace if target is Databricks
+            if target_platform == "databricks":
+                _upload_config_to_databricks(agent_name, config, config_file, console)
+        else:
+            console.print(f"  [yellow]Warning: No migration_config.json found in input folder[/yellow]")
+    else:
+        # Create template migration_config.json
+        config = {
+            "project_name": project_name,
+            "source": {
+                "type": source_type,
+                "connection": {
+                    "_comment": "Add your source connection details here"
+                }
+            },
+            "target": {
+                "platform": target_platform,
+                "connection": {
+                    "_comment": "Add your target connection details here"
+                }
+            },
+            "options": {
+                "wave_size": 10,
+                "parallel_jobs": 4
+            }
+        }
+
+        config_file = agent_input_path / "config" / "migration_config.json"
+        with open(config_file, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2)
+        console.print(f"  [green]+[/green] Created ~/.deepagents/{agent_name}/memories/input/config/migration_config.json")
 
     # Create deepmig.yaml project file
     project_config = f"""# DeepMig Project Configuration
@@ -253,7 +379,7 @@ output_dir: ./output
     console.print(f"  1. Add your legacy source files to: [cyan]./input/codebase/[/cyan]")
     console.print(f"     (or directly: ~/.deepagents/{agent_name}/memories/input/codebase/)")
     console.print(f"  2. Add schema metadata to: [cyan]./input/metadata/[/cyan]")
-    console.print(f"  3. (Optional) Add dependency graph: [cyan]./input/graph/graph.json[/cyan]")
+    console.print(f"  3. (Optional) Add dependency graph: [cyan]./input/graph/graph_summary.yaml[/cyan]")
     console.print(f"  4. Edit config if needed: [cyan]./input/config/migration_config.json[/cyan]")
     console.print()
     console.print(f"  Then run: [bold cyan]deepmig --agent {agent_name}[/bold cyan]")
@@ -267,14 +393,14 @@ from mig_core.skills.commands import execute_skills_command, setup_skills_parser
 from mig_core.session import load_state, get_resume_info, create_initial_state, save_state, WorkflowSession
 
 
-# DeepMig ASCII banner - ASCII-only for Windows compatibility
+# DeepMig ASCII banner - Metazense purple filled block letters
 DEEPMIG_ASCII = """[bold #8142ff]
-  ____  ______ ______ _____  __  __ _____ _____
- |  _ \\|  ____|  ____|  __ \\|  \\/  |_   _/ ____|
- | | | | |__  | |__  | |__) | \\  / | | || |  __
- | | | |  __| |  __| |  ___/| |\\/| | | || | |_ |
- | |_| | |____| |____| |    | |  | |_| || |__| |
- |____/|______|______|_|    |_|  |_|_____|\\_____|
+ ██████╗  ███████╗ ███████╗ ██████╗  ███╗   ███╗ ██╗  ██████╗
+ ██╔══██╗ ██╔════╝ ██╔════╝ ██╔══██╗ ████╗ ████║ ██║ ██╔════╝
+ ██║  ██║ █████╗   █████╗   ██████╔╝ ██╔████╔██║ ██║ ██║  ███╗
+ ██║  ██║ ██╔══╝   ██╔══╝   ██╔═══╝  ██║╚██╔╝██║ ██║ ██║   ██║
+ ██████╔╝ ███████╗ ███████╗ ██║      ██║ ╚═╝ ██║ ██║ ╚██████╔╝
+ ╚═════╝  ╚══════╝ ╚══════╝ ╚═╝      ╚═╝     ╚═╝ ╚═╝  ╚═════╝
 [/bold #8142ff]"""
 
 
@@ -329,6 +455,10 @@ def parse_args() -> argparse.Namespace:
         "--target",
         choices=["databricks", "snowflake", "fabric", "synapse", "bigquery", "redshift", "other"],
         help="Target platform (skip interactive prompt)"
+    )
+    init_parser.add_argument(
+        "--input",
+        help="Path to existing input folder to copy (config, metadata, codebase)"
     )
 
     # Skills command
@@ -539,6 +669,7 @@ def main() -> None:
                 project_dir=args.dir,
                 source_type=args.source,
                 target_platform=args.target,
+                input_path=args.input,
             )
         elif args.command == "skills":
             execute_skills_command(args)

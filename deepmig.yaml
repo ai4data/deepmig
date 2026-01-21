@@ -1,0 +1,7 @@
+# DeepMig Project Configuration
+agent: northwind-migration
+input_dir: ./input
+output_dir: ./output
+
+# Source: sql_server
+# Target: databricks

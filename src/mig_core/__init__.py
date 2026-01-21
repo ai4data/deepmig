@@ -11,6 +11,8 @@ from mig_core.llm import (
 )
 
 from mig_core.agent_memory import AgentMemoryMiddleware
+from mig_core.workflow_middleware import WorkflowMiddleware
+from mig_core.backends import EncodingAwareFilesystemBackend
 
 from mig_core.session import (
     # New class-based API
@@ -31,8 +33,11 @@ from mig_core.session import (
 )
 
 __all__ = [
-    # Agent Memory
+    # Backends
+    "EncodingAwareFilesystemBackend",
+    # Middleware
     "AgentMemoryMiddleware",
+    "WorkflowMiddleware",
     # LLM
     "LLMProvider",
     "create_llm",

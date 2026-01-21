@@ -28,7 +28,7 @@ read("{{ config_path }}")  # Will error if file doesn't exist!
 │   ├── source_schema.json
 │   └── target_schema.json
 ├── graph/                     # Rich graph representation of legacy codebase
-│   └── graph.json
+│   └── graph_summary.yaml
 └── codebase/                  # Raw legacy source files (FALLBACK ONLY)
     └── ...
 ```
@@ -66,4 +66,18 @@ When gathering information, agents MUST follow this order:
 4. CODEBASE    → Raw source files (ONLY if graph is insufficient)
 ```
 
-**Graph-to-Codebase Tracing**: Every node and edge in `graph.json` links to its origin file. If information is missing in the Graph (e.g., a specific SQL macro), trace the link back to the raw source file in `{{ memories_path }}/input/codebase/`.
+### ⚠️ CRITICAL: Read the FULL Graph File
+
+The `graph_summary.yaml` is an **optimized knowledge graph** designed for holistic reasoning. You MUST read the **ENTIRE file** - never truncate or use default limits.
+
+```
+# CORRECT: Read full graph with high limit
+graph = read("{{ graph_path }}", limit=10000)
+
+# WRONG: Default read may truncate!
+graph = read("{{ graph_path }}")  # May only get 400 lines!
+```
+
+The planning agent cannot reason over partial graphs. Topology-first analysis requires the complete DAG structure.
+
+**Graph-to-Codebase Tracing**: Every node and edge in `graph_summary.yaml` links to its origin file. If information is missing in the Graph (e.g., a specific SQL macro), trace the link back to the raw source file in `{{ memories_path }}/input/codebase/`.

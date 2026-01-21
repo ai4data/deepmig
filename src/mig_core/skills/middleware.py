@@ -156,7 +156,7 @@ class SkillsMiddleware(AgentMiddleware):
         """Convert absolute filesystem path to virtual /memories/ path.
 
         Args:
-            absolute_path: Absolute path like C:\\Users\\...\\agent_dir\\bundled_skills\\...
+            absolute_path: Absolute path like C:\\Users\\...\\agent_dir\\memories\\bundled_skills\\...
 
         Returns:
             Virtual path like /memories/bundled_skills/...
@@ -165,8 +165,12 @@ class SkillsMiddleware(AgentMiddleware):
         try:
             # Get path relative to agent_dir
             rel_path = abs_path.relative_to(self.agent_dir)
+            rel_str = str(rel_path).replace("\\", "/")
+            # If path is already under memories/, don't double-prefix
+            if rel_str.startswith("memories/"):
+                return "/" + rel_str
             # Convert to virtual path with forward slashes
-            return "/memories/" + str(rel_path).replace("\\", "/")
+            return "/memories/" + rel_str
         except ValueError:
             # Path is not under agent_dir, return as-is
             return absolute_path
