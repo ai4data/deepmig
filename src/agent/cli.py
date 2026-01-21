@@ -375,14 +375,20 @@ output_dir: ./output
     console.print()
     console.print("[bold green]Project initialized successfully![/bold green]")
     console.print()
-    console.print("[bold]Next steps:[/bold]")
-    console.print(f"  1. Add your legacy source files to: [cyan]./input/codebase/[/cyan]")
-    console.print(f"     (or directly: ~/.deepagents/{agent_name}/memories/input/codebase/)")
-    console.print(f"  2. Add schema metadata to: [cyan]./input/metadata/[/cyan]")
-    console.print(f"  3. (Optional) Add dependency graph: [cyan]./input/graph/graph_summary.yaml[/cyan]")
-    console.print(f"  4. Edit config if needed: [cyan]./input/config/migration_config.json[/cyan]")
-    console.print()
-    console.print(f"  Then run: [bold cyan]deepmig --agent {agent_name}[/bold cyan]")
+
+    if input_path:
+        # Input files already copied - just show how to run
+        console.print("[bold]Ready to migrate![/bold]")
+        console.print(f"  Run: [bold cyan]deepmig --agent {agent_name}[/bold cyan]")
+    else:
+        # No input provided - show next steps to add files
+        console.print("[bold]Next steps:[/bold]")
+        console.print(f"  1. Add your legacy source files to: [cyan]./input/codebase/[/cyan]")
+        console.print(f"  2. Add schema metadata to: [cyan]./input/metadata/[/cyan]")
+        console.print(f"  3. Add dependency graph: [cyan]./input/graph/graph_summary.yaml[/cyan]")
+        console.print(f"  4. Edit config: [cyan]./input/config/migration_config.json[/cyan]")
+        console.print()
+        console.print(f"  Then run: [bold cyan]deepmig --agent {agent_name}[/bold cyan]")
     console.print()
 
 

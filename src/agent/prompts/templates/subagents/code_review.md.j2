@@ -93,13 +93,13 @@ I evaluate code across **6 dimensions**, each with specific checks.
 
 ### 3. PERFORMANCE - Will the code run efficiently?
 
-**Anti-Patterns to Flag**
-- [ ] `collect()` on large datasets (memory explosion risk)
-- [ ] Unnecessary `count()` calls (triggers full table scan)
-- [ ] Multiple reads of the same source (should cache)
+**Anti-Patterns to Flag** (method names may vary by platform - check skill patterns)
+- [ ] Collecting full datasets to driver/memory (e.g., `collect()` in Spark)
+- [ ] Unnecessary full table scans (e.g., unneeded `count()` calls)
+- [ ] Multiple reads of the same source (should cache/persist)
 - [ ] Unfiltered joins (filter before join when possible)
 - [ ] Cross joins without explicit justification
-- [ ] UDFs where built-in functions would work
+- [ ] Custom functions where built-in equivalents exist
 
 **Optimization Opportunities**
 - [ ] Small table joins should use broadcast hints
@@ -189,7 +189,10 @@ I evaluate code across **6 dimensions**, each with specific checks.
 ### Step 1: Understand Context
 1. Read the migration plan to understand what this script should accomplish
 2. Read the config to understand the environment
-3. If wave N > 0, read previous wave scripts to understand the input schema
+3. **MANDATORY for wave N > 0**: Read ALL previous wave scripts (wave0 through waveN-1)
+   - Extract exact column names created in prior waves
+   - Verify current script references match prior wave outputs
+   - This is a **CRITICAL** check - column mismatches cause runtime failures
 
 ### Step 2: Structural Review
 1. Check imports and dependencies

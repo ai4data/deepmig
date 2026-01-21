@@ -190,30 +190,28 @@ Wave 1: I incorrectly assume PascalCase columns (CustomerID) ← WRONG!
    - For wave N: Read all waves 0 through N-1
 
 2. **Extract the EXACT column names** I used in table definitions:
-   ```python
-   # If wave0 has:
-   .withColumnRenamed("CustomerID", "customer_id")
-
-   # Then wave1 MUST use:
-   F.col("customer_id")  # NOT F.col("CustomerID")
+   ```
+   # Example (syntax varies by target skill):
+   # If wave0 renames "CustomerID" → "customer_id"
+   # Then wave1 MUST reference "customer_id", NOT "CustomerID"
    ```
 
 3. **Use bronze table schema as source of truth** - not source system conventions
 
 ### Column Name Rules
 
-| Source System | Bronze Table | Wave 1+ Scripts |
-|---------------|--------------|-----------------|
-| `CustomerID` | `customer_id` | `F.col("customer_id")` |
-| `CompanyName` | `company_name` | `F.col("company_name")` |
-| `ContactTitle` | `contact_title` | `F.col("contact_title")` |
+| Source System | Bronze Table | Wave 1+ Reference |
+|---------------|--------------|-------------------|
+| `CustomerID` | `customer_id` | Use `customer_id` |
+| `CompanyName` | `company_name` | Use `company_name` |
+| `ContactTitle` | `contact_title` | Use `contact_title` |
 
 ### Validation Before Output
 
 Before finalizing any wave N script (N > 0):
-- List all `F.col("xxx")` references in my code
+- List all column references in my code
 - Verify each column exists in the source tables I created in previous waves
-- If unsure, query the table schema: `DESCRIBE catalog.schema.table`
+- If unsure, query the table schema using the skill's schema inspection pattern
 </wave_continuity>
 
 <code_generation_workflow>
@@ -253,46 +251,41 @@ Assemble patterns into complete script:
 
 ### Step 4: Local Validation
 
-Before handoff, validate:
+Before handoff, validate using skill-provided validation patterns:
 
-```bash
-# Syntax check
-python -m py_compile {{ scripts_output }}/script.py
-
-# Import verification
-python -c "from pyspark.sql import SparkSession; print('OK')"
-```
+- **Syntax check**: Use the validation method specified in the skill's code-patterns.md
+- **Import verification**: Verify imports match the skill's required libraries
+- **Config loading**: Ensure all config paths resolve correctly for the execution mode
 </code_generation_workflow>
 
 <universal_standards>
 ## Universal Coding Standards
 
-These apply to ALL platforms:
+These principles apply to ALL platforms. **Specific syntax comes from the target skill's code-patterns.md.**
 
 ### A. Configuration Loading
 
-```python
-# Always load from config, never hardcode
-catalog = config.get('target', {}).get('catalog', {}).get('name')
-schema = config.get('target', {}).get('catalog', {}).get('schemas', {}).get('bronze')
-```
+Always load values from config, never hardcode. Example pattern (syntax varies by skill):
 
-**Anti-Pattern:**
-```python
-❌ catalog = "northwind_migration"  # Hardcoded!
-✅ catalog = config['target']['catalog']['name']  # Dynamic
+```
+# CORRECT: Load from config dynamically
+catalog = config["target"]["catalog"]["name"]
+schema = config["target"]["catalog"]["schemas"]["bronze"]
+
+# WRONG: Hardcoded values
+catalog = "northwind_migration"  ❌ Hardcoded!
 ```
 
 ### B. Type Casting
 
-Use mappings from `type-mappings.json`:
+Use mappings from skill's `type-mappings.json`:
 
 ```
-# From type-mappings.json:
+# Example from type-mappings.json:
 # "MONEY": "DECIMAL(19,4)"
 
-# Apply in code:
-col("price").cast("DECIMAL(19,4)")
+# Apply using skill's casting syntax
+# (e.g., cast the "price" column to DECIMAL(19,4))
 ```
 
 ### C. Join Fidelity
@@ -304,15 +297,12 @@ Match Blueprint exactly:
 
 ### D. Error Handling
 
-Include try/except with meaningful errors:
-```python
-try:
-    df.write.mode("overwrite").saveAsTable(target_table)
-    print(f"Successfully wrote {df.count()} rows")
-except Exception as e:
-    print(f"ERROR writing to {target_table}: {e}")
-    raise
-```
+Include error handling with meaningful messages (syntax per skill):
+
+- Wrap I/O operations in error handling blocks
+- Log success with row counts
+- Log failures with context (target table, error message)
+- Re-raise errors to ensure failures are visible
 </universal_standards>
 
 <output_specification>

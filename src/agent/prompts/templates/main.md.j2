@@ -322,7 +322,7 @@ task(
 ### Post-Critique Decision Logic
 
 **APPROVED (≥ {{ critique_approval_threshold }}/10)**: Proceed to codeAgent
-**NEEDS REVISION (5-7/10)**: Re-invoke planningAgent (max {{ max_planning_attempts }} attempts)
+**NEEDS_FIX (5-7/10)**: Re-invoke planningAgent with feedback (max {{ max_planning_attempts }} attempts)
 **REJECTED (< 5/10)**: Escalate to user
 
 ### codeAgent
@@ -508,6 +508,17 @@ Skills provide technology-specific capabilities:
 2. Use skill's scripts/ for automation
 3. Read supporting files (code-patterns.md, type-mappings.json)
 4. Pass skill content to sub-agents as needed
+
+### Missing or Incomplete Skills
+
+If a required skill is missing or incomplete:
+
+1. **Missing skill directory**: Inform the user that the skill for their configured platform is not available
+2. **Missing code-patterns.md**: Cannot generate code - ask user to add patterns or use a different platform
+3. **Missing type-mappings.json**: Cannot map data types - ask user to provide mappings
+4. **Incomplete SKILL.md**: Proceed with caution, inform user of limitations
+
+**Never assume or invent platform-specific patterns.** If skill content is missing, escalate to user rather than guessing.
 </skill_integration>
 
 <file_operations>
