@@ -2,7 +2,7 @@
 
 **AI-Powered Migration Orchestrator** for legacy ETL systems to modern cloud data platforms.
 
-![DeepMig Architecture](docs/images/deepmig.jpg)
+![DeepMig Architecture](docs/images/deepmig-general.jpg)
 
 ## What is DeepMig?
 
