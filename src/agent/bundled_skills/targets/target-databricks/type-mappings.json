@@ -1,5 +1,5 @@
 {
-  "sql_server": {
+  "sqlserver": {
     "description": "SQL Server to Databricks (Spark SQL) type mappings",
     "mappings": {
       "bigint": "BIGINT",

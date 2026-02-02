@@ -51,3 +51,13 @@ uv.lock
 
 # Local config (may contain secrets or personal preferences)
 config.yaml
+
+# Claude Code artifacts
+.claude/plans/
+
+# Test input/output directories
+input/
+output/
+
+# Windows artifacts
+nul

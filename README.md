@@ -33,7 +33,7 @@ cp .env.example .env
 # Edit .env with your API credentials
 
 # Initialize a migration project
-deepmig init --agent my-migration --source sql_server --target databricks
+deepmig init --agent my-migration --source sqlserver --target databricks
 
 # Run migration
 deepmig --agent my-migration

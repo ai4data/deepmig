@@ -1,6 +1,6 @@
 ---
 name: source-sqlserver
-description: SQL Server source system analysis and extraction. Use when config.source.type is "sql_server". Provides metadata extraction, schema analysis, data profiling, and query execution capabilities.
+description: SQL Server source system analysis and extraction. Use when config.source.type is "sqlserver". Provides metadata extraction, schema analysis, data profiling, and query execution capabilities.
 allowed-tools: Read, Bash
 ---
 
@@ -12,7 +12,7 @@ Load this skill when the migration config specifies:
 ```json
 {
   "source": {
-    "type": "sql_server"
+    "type": "sqlserver"
   }
 }
 ```
@@ -77,7 +77,7 @@ When mapping SQL Server types to target platforms, use the target skill's `type-
 ## Workflow Integration
 
 ### During Planning Phase
-1. Agent reads config -> source.type = "sql_server"
+1. Agent reads config -> source.type = "sqlserver"
 2. Agent loads this skill
 3. Agent runs `get_schema.py` to extract metadata
 4. Agent uses schema in migration plan
@@ -101,7 +101,7 @@ All scripts are in the `scripts/` subdirectory:
 User: "Start migration planning"
 
 Agent:
-1. Read config: source.type = "sql_server", target.platform = "databricks"
+1. Read config: source.type = "sqlserver", target.platform = "databricks"
 2. Load source-sqlserver skill (this skill)
 3. Run: python scripts/get_row_counts.py
 4. Run: python scripts/get_schema.py --list-tables

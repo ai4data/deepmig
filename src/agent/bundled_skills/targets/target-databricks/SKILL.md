@@ -1,7 +1,7 @@
 ---
 name: target-databricks
 description: Databricks target platform patterns and code generation. Use when config.target.platform is "databricks". Provides PySpark code patterns, Delta Lake operations, Unity Catalog conventions, and type mappings.
-allowed-tools: Read, Bash
+allowed-tools: Read, local_execute, local_shell, submit_job, run_sql
 ---
 
 # Databricks Target Skill
@@ -24,7 +24,104 @@ Load this skill when the migration config specifies:
 | `SKILL.md` | This file - overview and usage |
 | `code-patterns.md` | PySpark code templates and patterns |
 | `type-mappings.json` | Source-to-Databricks type mappings |
-| `scripts/` | Execution scripts (use databricks-execution skill) |
+
+## Execution Tools
+
+This skill provides access to these execution tools:
+
+| Tool | Purpose | Runs On |
+|------|---------|---------|
+| `local_execute` | Run Python scripts locally | Local machine |
+| `local_shell` | Run shell commands locally | Local machine |
+| `submit_job` | Submit PySpark scripts to cluster | Databricks cluster |
+| `run_sql` | Execute SQL queries | Databricks SQL Warehouse |
+
+### Tool Selection Criteria
+
+**Choose the right tool based on these criteria:**
+
+#### Use `local_execute` when:
+- The source system is **not reachable from Databricks cluster** (e.g., localhost, firewalled on-prem server without VPN/Private Link)
+- The script needs **local filesystem access** (reading local files, credentials)
+- The script uses **non-Spark libraries** to connect to source (pyodbc, cx_Oracle, etc.)
+
+```
+local_execute(
+    script_path="/path/to/script.py",
+    script_args="--config /path/to/config.json"
+)
+```
+
+#### Use `submit_job` when:
+- The script is **PySpark code** that runs on the cluster
+- The data is **already in Databricks** (transforming bronze→silver→gold)
+- The source is **reachable from cluster** (cloud database, on-prem with VPN/Private Link)
+- The script uses **Spark DataFrame operations**
+
+```
+submit_job(
+    script_path="/memories/scripts/transform.py",
+    wait_for_completion=True
+)
+```
+
+#### Use `run_sql` when:
+- Running **validation queries** (row counts, data quality checks)
+- Executing **DDL statements** (CREATE TABLE, ALTER TABLE)
+- Running **ad-hoc SQL** queries against Databricks tables
+
+```
+run_sql("SELECT COUNT(*) as cnt FROM catalog.schema.table")
+```
+
+### Decision Flow
+
+```
+What does the script need to do?
+│
+├─► Read from source system
+│   │
+│   ├─► Source reachable from Databricks cluster?
+│   │   ├─► YES → submit_job (PySpark JDBC)
+│   │   └─► NO  → local_execute (local connectivity)
+│   │
+├─► Transform data already in Databricks
+│   └─► submit_job (PySpark on cluster)
+│
+├─► Validate/query Databricks tables
+│   └─► run_sql (SQL Warehouse)
+│
+└─► Run shell commands (pip, file ops)
+    └─► local_shell (local machine)
+```
+
+### Tool Response Formats
+
+**`local_execute` returns:**
+```json
+{
+  "success": true,
+  "exit_code": 0,
+  "stdout": "...",
+  "stderr": "",
+  "message": "Script completed successfully"
+}
+```
+
+**`submit_job` returns:**
+```json
+{
+  "run_id": 12345,
+  "status": "TERMINATED",
+  "result_state": "SUCCESS",
+  "message": "Job completed successfully"
+}
+```
+
+**`run_sql` returns:**
+```json
+[{"column_name": "value", ...}]
+```
 
 ## Quick Reference
 
@@ -32,7 +129,6 @@ Load this skill when the migration config specifies:
 ```
 {catalog}.{schema}.{table}
 ```
-Example: `northwind_migration.northwnd_bronze.customers`
 
 ### Medallion Architecture
 ```
@@ -81,32 +177,26 @@ Example (SQL Server -> Databricks):
 }
 ```
 
-## Execution
+## Configuration
 
-For running scripts on Databricks, use the scripts in this skill's `scripts/` directory:
+All credentials are read from `/memories/input/config/migration_config.json`:
 
-```bash
-python "{skill_dir}/scripts/submit_job.py" \
-  --script "/path/to/script.py" \
-  --cluster-id "$DATABRICKS_CLUSTER_ID"
+```json
+{
+  "target": {
+    "workspace_url": "https://adb-xxx.azuredatabricks.net",
+    "cluster_id": "cluster-id",
+    "warehouse_id": "warehouse-id"
+  },
+  "credentials": {
+    "databricks": {
+      "personal_access_token": "dapi..."
+    }
+  }
+}
 ```
 
-### Available Execution Scripts
-
-| Script | Description |
-|--------|-------------|
-| `submit_job.py` | Submit a Python script to Databricks Jobs API |
-| `get_run_status.py` | Check the status of a running job |
-| `upload_to_dbfs.py` | Upload a file to DBFS storage |
-
-## Environment Variables Required
-
-| Variable | Description |
-|----------|-------------|
-| `DATABRICKS_HOST` | Workspace URL |
-| `DATABRICKS_TOKEN` | Personal access token |
-| `DATABRICKS_CLUSTER_ID` | Cluster for job execution |
-| `DATABRICKS_WAREHOUSE_ID` | SQL warehouse for queries |
+No environment variables needed - everything is in the config file.
 
 ## Best Practices
 
@@ -135,5 +225,7 @@ python "{skill_dir}/scripts/submit_job.py" \
 5. Agent generates PySpark code using patterns
 
 ### During Validation
-1. Agent uses this skill's `scripts/submit_job.py` to submit jobs
-2. Agent uses `validation/data-validation` skill to compare counts
+1. Agent determines correct tool based on script requirements
+2. Agent executes script using appropriate tool
+3. Agent uses `run_sql` to validate results
+4. Agent compares results against expected values from config

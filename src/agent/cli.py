@@ -185,7 +185,7 @@ def init_project(
     source_options = [
         ("ssis", "SSIS (SQL Server Integration Services)"),
         ("informatica", "Informatica PowerCenter"),
-        ("sql_server", "SQL Server (Stored Procedures/Views)"),
+        ("sqlserver", "SQL Server (Stored Procedures/Views)"),
         ("sas", "SAS Data Integration"),
         ("oracle", "Oracle PL/SQL"),
         ("datastage", "IBM DataStage"),
@@ -454,7 +454,7 @@ def parse_args() -> argparse.Namespace:
     )
     init_parser.add_argument(
         "--source",
-        choices=["ssis", "informatica", "sql_server", "sas", "oracle", "datastage", "other"],
+        choices=["ssis", "informatica", "sqlserver", "sas", "oracle", "datastage", "other"],
         help="Source system type (skip interactive prompt)"
     )
     init_parser.add_argument(
